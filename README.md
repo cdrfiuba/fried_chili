@@ -1,3 +1,5 @@
+![Logo](fried_chili.png)
+
 El objetivo de este proyecto es extraer la mayor cantidad de información posible de los wikis del chiliproject y transformarla en forma automática a wikis de github.
 
 El formato de wiki usado por [Chiliproject](https://www.chiliproject.org/) es [Textile](https://en.wikipedia.org/wiki/Textile_(markup_language)).
