@@ -185,10 +185,14 @@ mysql> describe projects;
 +-------------+--------------+------+-----+---------+----------------+
 12 rows in set (0.00 sec)
 ```
+![DB relacional](images/db1.png)
 
 ## Paquetes para conectarse a la base de datos usando Python
 
+Usamos [SQL Alchemy](http://www.sqlalchemy.org/)
+
 `$ sudo apt-get install python-sqlalchemy`
+
 `$ sudo apt-get install python-mysqldb`
 
 
