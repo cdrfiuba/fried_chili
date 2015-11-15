@@ -1,13 +1,15 @@
-![Logo](fried_chili.png)
+![Logo](images/fried_chili.png)
 
 El objetivo de este proyecto es extraer la mayor cantidad de información posible de los wikis del chiliproject y transformarla en forma automática a wikis de github.
 
 El formato de wiki usado por [Chiliproject](https://www.chiliproject.org/) es [Textile](https://en.wikipedia.org/wiki/Textile_(markup_language)).
+
 El formato de wiki usado por Github es [Markdown](https://guides.github.com/features/mastering-markdown/)
 
 ## Analizando la base de datos del chili
 
 Importar la base de datos:
+
 `$ mysql -p  < database_chiliproject.sql`
 
 ```
