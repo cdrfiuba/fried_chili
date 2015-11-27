@@ -26,51 +26,70 @@ def main():
   connection = dbEngine.connect()
 
   # Cargar información de los proyectos
-  projects = dbEngine.execute("select id, name, identifier, description, is_public from projects")
+  result = dbEngine.execute("select id, name, identifier, description, is_public from projects")
+  projects = result.fetchall()
 
   # Obtener todos los proyectos
   for project in projects:
+    parent_name, parent_id = get_root_parent(project["id"])
+    print parent_name
     if project["is_public"]:
-      create_file_struct(os.path.join(base_dir, "public"), project["identifier"])
+      project_path = os.path.join(base_dir, parent_name, "public", project["identifier"])
     else:
-      create_file_struct(os.path.join(base_dir, "private"), project["identifier"])
+      project_path = os.path.join(base_dir, parent_name, "private", project["identifier"])
+    
+    create_file_struct(project_path)
+    
+    # generar los wikis para este proyecto
+    generate_wikis(os.path.join(project_path, "wiki"), project["id"])
+  
 
-  projects.close()
+# Obtener el proyecto padre raíz
+def get_root_parent(project_id):
+  result = dbEngine.execute("select parent_id, identifier from projects where id = %s" % project_id)
+  parent = result.fetchall()[0]
+  print parent
+  parent_name = parent["identifier"]
+  parent_id = parent["parent_id"]
+  
+  while parent_id:
+    parent_name, parent_id = get_root_parent(parent_id)
+        
+  return parent_name, parent_id
+  
 
-
-# generar todas las wikis para un proyecto
-def generate_wikis(wiki_base_path):
+# Generar todas las wikis para un proyecto
+def generate_wikis(wiki_base_path, project_id):
   # para cada proyecto, obtener sus wikis
-  wikis = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
+  result = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
+  wikis = result.fetchall()
   
   for wiki in wikis:
     # obtener las páginas que integran la wiki
-    wiki_pages = dbEngine.execute("select id, title from wiki_pages where wiki_id = %s" % wiki["id"])
+    result = dbEngine.execute("select id, title from wiki_pages where wiki_id = %s" % wiki["id"])
+    wiki_pages = result.fetchall()
     
     for page in wiki_pages:
-      wiki_file = open()
-      fsalida.write("Wiki page title: %s\n" % page['title'])
+      wiki_file = open(os.path.join(wiki_base_path, page["title"] + ".txt"), "w")
       # para cada página, obtener su contenido
-      contents = dbEngine.execute("select text from wiki_contents where page_id = %s" % page["id"])
+      result = dbEngine.execute("select text from wiki_contents where page_id = %s" % page["id"])
+      contents = result.fetchall()
       for content in contents:
-        fsalida.write("%s\n" % content["text"])
-      contents.close()    
-    
-    wiki_pages.close()
-  
-  wikis.close()
+        wiki_file.write("%s\n" % content["text"])
+      wiki_file.close();
 
 
-def create_file_struct(base_dir, project_name):
-  wiki_path = os.path.join(base_dir, project_name, "wiki")
-  src_path = os.path.join(base_dir, project_name, "src")
+# Crea la estructura de carpetas para colocar los proyectos
+def create_file_struct(project_dir):
+  wiki_path = os.path.join(project_dir, "wiki")
+  src_path = os.path.join(project_dir, "src")
   
   # Crear las carpetas si es que no existen
   if not os.path.exists(wiki_path):
     os.makedirs(wiki_path)
   if not os.path.exists(src_path):
     os.makedirs(src_path)
-  
+    
   # Iniciar el repositorio de git para el wiki
   call(["git", "init", wiki_path])
 
