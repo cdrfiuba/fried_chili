@@ -32,13 +32,14 @@ def main():
   # Obtener todos los proyectos
   for project in projects:
     parent_name, parent_id = get_root_parent(project["id"])
-    print parent_name
     if project["is_public"]:
       project_path = os.path.join(base_dir, parent_name, "public", project["identifier"])
     else:
       project_path = os.path.join(base_dir, parent_name, "private", project["identifier"])
     
     create_file_struct(project_path)
+    
+    generate_project_header(project_path, project["id"])
     
     # generar los wikis para este proyecto
     generate_wikis(os.path.join(project_path, "wiki"), project["id"])
@@ -48,7 +49,6 @@ def main():
 def get_root_parent(project_id):
   result = dbEngine.execute("select parent_id, identifier from projects where id = %s" % project_id)
   parent = result.fetchall()[0]
-  print parent
   parent_name = parent["identifier"]
   parent_id = parent["parent_id"]
   
@@ -77,6 +77,33 @@ def generate_wikis(wiki_base_path, project_id):
       for content in contents:
         wiki_file.write("%s\n" % content["text"])
       wiki_file.close();
+
+
+# Generar un archivo README con la información de la portada del proyecto, incluyendo sus participantes
+def generate_project_header(path, project_id):
+  # obtener info del proyecto
+  result = dbEngine.execute("select description, created_on, updated_on from projects where id = %s" % project_id)
+  project_info = result.fetchall()[0]
+  
+  members_list = get_members(project_id)
+  
+  header_file = open(os.path.join(path, "README.md"), "w")
+  
+  header_file.write("Project created on: %s\n" % project_info["created_on"])
+  header_file.write("Project last updated on: %s\n" % project_info["updated_on"])
+  header_file.write("Project members:\n")
+  for member in members_list:
+    header_file.write("  %s %s <%s>\n" % (member["firstname"], member["lastname"], member["mail"]))
+  header_file.write("\n")
+  header_file.write("%s\n" % project_info["description"])
+  header_file.close()
+
+
+# Obtener los participantes del proyecto
+def get_members(project_id):
+  result = dbEngine.execute("select user_id, firstname, lastname, mail from members, users where users.id = members.user_id and members.project_id = %s" % project_id)
+  members = result.fetchall()
+  return members
 
 
 # Crea la estructura de carpetas para colocar los proyectos
