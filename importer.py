@@ -10,7 +10,17 @@ def main():
   global VERBOSE_LEVEL
   
   VERBOSE_LEVEL = 10
+  
+  # carpeta destino donde se generarán todas las carpetas de proyectos
   base_dir = "/home/ernesto/test/repotest/"
+  
+  # carpeta fuente donde se encuentran los repositorios de código para 
+  # copiar
+  src_repo_dir = ""
+  
+  # carpeta fuente donde se encuentran los documentos y adjuntos para
+  # copiar
+  doc_dir = ""
   
   # Cargar credenciales para la base de datos desde un archivo externo
   fName = "mysql-credentials.txt"
@@ -47,12 +57,22 @@ def main():
     else:
       project_path = os.path.join(base_dir, parent_name, "private", project["identifier"])
     
+    wiki_path = os.path.join(project_path, "wiki")
+    src_path = os.path.join(project_path, "src")
     create_file_struct(project_path)
     
     generate_project_header(project_path, project["id"])
     
     # generar los wikis para este proyecto
-    generate_wikis(os.path.join(project_path, "wiki"), project["id"])
+    generate_wikis(wiki_path, project["id"])
+        
+    # copiar el repositorio de código para este proyecto
+    # ...
+    
+    repo_init(wiki_path, "Commit inicial del wiki.")
+    # ignorar los wikis que van en un repo aparte
+    create_ignore_file(project_path)
+    repo_init(project_path, "Commit inicial del proyecto.")
 
 # Escribir información útil en la salida hacia usuario. El nivel de
 # verbosidad es configurable.
@@ -145,13 +165,26 @@ def create_file_struct(project_dir):
     os.makedirs(wiki_path)
   if not os.path.exists(src_path):
     os.makedirs(src_path)
-    
-  # Iniciar el repositorio de git para el wiki
-  #call(["git", "init", wiki_path])
 
 # Convierte las wikis de textile a markdown
 def convert_to_markdown(wiki_input, wiki_output):
   call(["pandoc", "-f", "textile", "-t", "markdown_github", "-o", wiki_output, wiki_input])
+
+# Crear el archivo ignore para git
+def create_ignore_file(path):
+  file_name = os.path.join(path, ".gitignore")
+  ignore_file = open(file_name, "a")
+  # ignorar la carpeta de wikis porque eso va en su propio repo
+  ignore_file.write("wiki/")
+  ignore_file.close()
+
+# Iniciar el repositorio. El commit inicial sea realiza con el mensaje
+# especificado
+def repo_init(path, msg):
+  call(["git", "-C", path, "init"])
+  call(["git", "-C", path, "add", "."])
+  call(["git", "-C", path, "commit", "-m", msg])
+
 
 if __name__ == "__main__":
   main()
