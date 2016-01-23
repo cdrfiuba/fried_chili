@@ -201,5 +201,8 @@ Usamos [SQL Alchemy](http://www.sqlalchemy.org/)
 http://pandoc.org/
 https://github.com/jgm/pandoc
 
+## Herramienta para convertir repositorios de mercurial a git:
+
+https://github.com/frej/fast-export
 
 
