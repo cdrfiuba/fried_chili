@@ -2,6 +2,7 @@
 
 from sqlalchemy import create_engine
 import os
+import shutil
 from subprocess import call
 
 
@@ -16,11 +17,11 @@ def main():
   
   # carpeta fuente donde se encuentran los repositorios de código para 
   # copiar
-  src_repo_dir = ""
+  src_repo_dir = "/home/ernesto/temp/backup_labi/repos/hg/repos"
   
   # carpeta fuente donde se encuentran los documentos y adjuntos para
   # copiar
-  doc_dir = ""
+  doc_dir = "/home/ernesto/temp/backup_labi/files"
   
   # Cargar credenciales para la base de datos desde un archivo externo
   fName = "mysql-credentials.txt"
@@ -67,12 +68,15 @@ def main():
     generate_wikis(wiki_path, project["id"])
         
     # copiar el repositorio de código para este proyecto
-    # ...
+    copy_source_repo(project["id"], src_repo_dir, src_path)
     
     repo_init(wiki_path, "Commit inicial del wiki.")
     # ignorar los wikis que van en un repo aparte
     create_ignore_file(project_path)
     repo_init(project_path, "Commit inicial del proyecto.")
+    
+    # copiar los adchivos adjuntos asociados al proyecto
+    copy_attachments(project["id"], doc_dir, wiki_path)
 
 # Escribir información útil en la salida hacia usuario. El nivel de
 # verbosidad es configurable.
@@ -178,13 +182,80 @@ def create_ignore_file(path):
   ignore_file.write("wiki/")
   ignore_file.close()
 
-# Iniciar el repositorio. El commit inicial sea realiza con el mensaje
+# Iniciar el repositorio. El commit inicial se realiza con el mensaje
 # especificado
 def repo_init(path, msg):
   call(["git", "-C", path, "init"])
   call(["git", "-C", path, "add", "."])
   call(["git", "-C", path, "commit", "-m", msg])
 
+# Copiar el repositorio de codigo de cada proyecto
+def copy_source_repo(project_id, src_path, dest_path):
+  # obtener el repositorio del proyecto
+  result = dbEngine.execute("select root_url, type from repositories where project_id=%s and type like '%%Mercurial%%'", project_id)
+  repos = result.fetchall()
+  
+  for repo in repos:
+    if repo["root_url"] != "":
+      # extraer el nombre del repo a partir del path
+      repo_name_pos = repo["root_url"].rfind("/") + 1
+      repo_name = repo["root_url"][repo_name_pos: ]
+      repo_path = os.path.join(src_path, repo_name)
+      call(["hg", "clone", repo_path, dest_path])
+
+# Copiar los documentos asociados a cada proyecto
+def copy_attachments(project_id, src_path, dest_path):
+  copy_documents(project_id, src_path, dest_path)
+  copy_wiki_docs(project_id, src_path, dest_path)
+  copy_project_docs(project_id, src_path, dest_path)
+ 
+# Copiar archivos de documentos asociados al proyecto
+def copy_documents(project_id, src_path, dest_path):
+   # obtener los documentos asociados al proyecto
+  result = dbEngine.execute("select id from documents where project_id=%s", project_id)
+  docs = result.fetchall()
+  
+  for doc in docs:
+    result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Document' and container_id=%s", doc["id"])
+    files = result.fetchall()
+    # copiar los archivos
+    for file in files:
+      src_full_path = os.path.join(src_path, file["disk_filename"])
+      dest_full_path = os.path.join(dest_path, file["filename"])
+      talk("Copiando archivo %s" % src_full_path, 10)
+      shutil.copyfile(src_full_path, dest_full_path)
+  
+def copy_wiki_docs(project_id, src_path, dest_path):
+  # obtener todas las wikis
+  result = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
+  wikis = result.fetchall()
+  
+  for wiki in wikis:
+    # obtener las páginas que integran la wiki
+    result = dbEngine.execute("select id from wiki_pages where wiki_id = %s" % wiki["id"])
+    wiki_pages = result.fetchall()
+    for page in wiki_pages:
+      # obtener los archivos de cada wiki
+      result = dbEngine.execute("select filename, disk_filename from attachments where container_type='WikiPage' and container_id=%s", page["id"])
+      files = result.fetchall()
+       # copiar los archivos
+      for file in files:
+        src_full_path = os.path.join(src_path, file["disk_filename"])
+        dest_full_path = os.path.join(dest_path, file["filename"])
+        talk("Copiando archivo %s" % src_full_path, 10)
+        shutil.copyfile(src_full_path, dest_full_path)
+
+def copy_project_docs(project_id, src_path, dest_path):
+   # obtener los documentos asociados al proyecto
+  result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Project' and container_id=%s", project_id)
+  files = result.fetchall()
+  
+  # copiar los archivos documento
+  for file in files:
+    src_full_path = os.path.join(src_path, file["disk_filename"])
+    dest_full_path = os.path.join(dest_path, file["filename"])
+    talk("Copiando archivo %s" % src_full_path, 10)
+    shutil.copyfile(src_full_path, dest_full_path)
 
 if __name__ == "__main__":
   main()
