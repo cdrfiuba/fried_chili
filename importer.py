@@ -3,7 +3,8 @@
 from sqlalchemy import create_engine
 import os
 import shutil
-from subprocess import call
+from subprocess import call, Popen
+import stat
 
 
 def main():
@@ -22,6 +23,9 @@ def main():
   # carpeta fuente donde se encuentran los documentos y adjuntos para
   # copiar
   doc_dir = "/home/ernesto/temp/backup_labi/files"
+  
+  # ruta a la herramienta de conversión hg-fast-export
+  hg_export_cmd_dir = "/home/ernesto/temp/fast-export"
   
   # Cargar credenciales para la base de datos desde un archivo externo
   fName = "mysql-credentials.txt"
@@ -59,7 +63,8 @@ def main():
       project_path = os.path.join(base_dir, parent_name, "private", project["identifier"])
     
     wiki_path = os.path.join(project_path, "wiki")
-    src_path = os.path.join(project_path, "src")
+    src_hg_path = os.path.join(project_path, "src_hg")
+    src_git_path = os.path.join(project_path, "src_git")
     create_file_struct(project_path)
     
     generate_project_header(project_path, project["id"])
@@ -68,12 +73,12 @@ def main():
     generate_wikis(wiki_path, project["id"])
         
     # copiar el repositorio de código para este proyecto
-    copy_source_repo(project["id"], src_repo_dir, src_path)
+    copy_source_repo(project["id"], src_repo_dir, src_hg_path)
+    
+    # convertir el repositorio de mercurial a git
+    convert_hgrepo_to_git(hg_export_cmd_dir, src_hg_path, src_git_path)
     
     repo_init(wiki_path, "Commit inicial del wiki.")
-    # ignorar los wikis que van en un repo aparte
-    create_ignore_file(project_path)
-    repo_init(project_path, "Commit inicial del proyecto.")
     
     # copiar los adchivos adjuntos asociados al proyecto
     copy_attachments(project["id"], doc_dir, wiki_path)
@@ -162,25 +167,20 @@ def get_members(project_id):
 # Crea la estructura de carpetas para colocar los proyectos
 def create_file_struct(project_dir):
   wiki_path = os.path.join(project_dir, "wiki")
-  src_path = os.path.join(project_dir, "src")
+  src_hg_path = os.path.join(project_dir, "src_hg")
+  src_git_path = os.path.join(project_dir, "src_git")
   
   # Crear las carpetas si es que no existen
   if not os.path.exists(wiki_path):
     os.makedirs(wiki_path)
-  if not os.path.exists(src_path):
-    os.makedirs(src_path)
+  if not os.path.exists(src_hg_path):
+    os.makedirs(src_hg_path)
+  if not os.path.exists(src_git_path):
+    os.makedirs(src_git_path)
 
 # Convierte las wikis de textile a markdown
 def convert_to_markdown(wiki_input, wiki_output):
   call(["pandoc", "-f", "textile", "-t", "markdown_github", "-o", wiki_output, wiki_input])
-
-# Crear el archivo ignore para git
-def create_ignore_file(path):
-  file_name = os.path.join(path, ".gitignore")
-  ignore_file = open(file_name, "a")
-  # ignorar la carpeta de wikis porque eso va en su propio repo
-  ignore_file.write("wiki/")
-  ignore_file.close()
 
 # Iniciar el repositorio. El commit inicial se realiza con el mensaje
 # especificado
@@ -203,6 +203,13 @@ def copy_source_repo(project_id, src_path, dest_path):
       repo_path = os.path.join(src_path, repo_name)
       call(["hg", "clone", repo_path, dest_path])
 
+def convert_hgrepo_to_git(cmd_path, src_path, dest_path):
+  command = os.path.join(cmd_path, "hg-fast-export.sh")
+  call(["git", "-C", dest_path, "init"])
+  proc = Popen([command, "-r", src_path], cwd = dest_path)
+  proc.wait()
+  call(["git", "-C", dest_path, "checkout", "master"])
+  
 # Copiar los documentos asociados a cada proyecto
 def copy_attachments(project_id, src_path, dest_path):
   copy_documents(project_id, src_path, dest_path)
@@ -259,6 +266,3 @@ def copy_project_docs(project_id, src_path, dest_path):
 
 if __name__ == "__main__":
   main()
-
-
-
