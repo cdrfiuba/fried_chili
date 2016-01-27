@@ -3,7 +3,7 @@
 from sqlalchemy import create_engine
 import os
 import shutil
-from subprocess import call, Popen
+from subprocess import Popen
 import stat
 
 
@@ -78,10 +78,12 @@ def main():
     # convertir el repositorio de mercurial a git
     convert_hgrepo_to_git(hg_export_cmd_dir, src_hg_path, src_git_path)
     
-    repo_init(wiki_path, "Commit inicial del wiki.")
-    
     # copiar los adchivos adjuntos asociados al proyecto
     copy_attachments(project["id"], doc_dir, wiki_path)
+
+    # generar el repositorio git para el wiki
+    repo_init(wiki_path, "Commit inicial del wiki.")
+
 
 # Escribir información útil en la salida hacia usuario. El nivel de
 # verbosidad es configurable.
@@ -95,10 +97,8 @@ def get_root_parent(project_id):
   parent = result.fetchall()[0]
   parent_name = parent["identifier"]
   parent_id = parent["parent_id"]
-  
   while parent_id:
     parent_name, parent_id = get_root_parent(parent_id)
-        
   return parent_name, parent_id
   
 
@@ -107,7 +107,6 @@ def generate_wikis(wiki_base_path, project_id):
   # para cada proyecto, obtener sus wikis
   result = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
   wikis = result.fetchall()
-  
   for wiki in wikis:
     # obtener las páginas que integran la wiki
     talk("\tProcesando las wikis para este proyecto...", 2)
@@ -136,14 +135,10 @@ def generate_project_header(path, project_id):
   # obtener info del proyecto
   result = dbEngine.execute("select description, created_on, updated_on from projects where id = %s" % project_id)
   project_info = result.fetchall()[0]
-  
   members_list = get_members(project_id)
-  
   textile_name = os.path.join(path, "README.txt")
   markdown_name = os.path.join(path, "README.md")
-  
   header_file = open(textile_name, "w")
-  
   header_file.write("Project created on: %s\n" % project_info["created_on"])
   header_file.write("Project last updated on: %s\n" % project_info["updated_on"])
   header_file.write("Project members:\n")
@@ -152,7 +147,6 @@ def generate_project_header(path, project_id):
   header_file.write("\n")
   header_file.write("%s\n" % project_info["description"])
   header_file.close()
-  
   convert_to_markdown(textile_name, markdown_name)
   os.remove(textile_name)
 
@@ -169,7 +163,6 @@ def create_file_struct(project_dir):
   wiki_path = os.path.join(project_dir, "wiki")
   src_hg_path = os.path.join(project_dir, "src_hg")
   src_git_path = os.path.join(project_dir, "src_git")
-  
   # Crear las carpetas si es que no existen
   if not os.path.exists(wiki_path):
     os.makedirs(wiki_path)
@@ -178,50 +171,63 @@ def create_file_struct(project_dir):
   if not os.path.exists(src_git_path):
     os.makedirs(src_git_path)
 
+
 # Convierte las wikis de textile a markdown
 def convert_to_markdown(wiki_input, wiki_output):
-  call(["pandoc", "-f", "textile", "-t", "markdown_github", "-o", wiki_output, wiki_input])
+  proc = Popen(["pandoc", "-f", "textile", "-t", "markdown_github", "-o", wiki_output, wiki_input])
+  proc.wait()
+
 
 # Iniciar el repositorio. El commit inicial se realiza con el mensaje
 # especificado
 def repo_init(path, msg):
-  call(["git", "-C", path, "init"])
-  call(["git", "-C", path, "add", "."])
-  call(["git", "-C", path, "commit", "-m", msg])
+  proc = Popen(["git", "-C", path, "init"])
+  proc.wait()
+  proc = Popen(["git", "-C", path, "add", "."])
+  proc.wait()
+  proc = Popen(["git", "-C", path, "commit", "-m", msg])
+  proc.wait()
+
 
 # Copiar el repositorio de codigo de cada proyecto
 def copy_source_repo(project_id, src_path, dest_path):
   # obtener el repositorio del proyecto
   result = dbEngine.execute("select root_url, type from repositories where project_id=%s and type like '%%Mercurial%%'", project_id)
   repos = result.fetchall()
-  
   for repo in repos:
     if repo["root_url"] != "":
       # extraer el nombre del repo a partir del path
       repo_name_pos = repo["root_url"].rfind("/") + 1
       repo_name = repo["root_url"][repo_name_pos: ]
       repo_path = os.path.join(src_path, repo_name)
-      call(["hg", "clone", repo_path, dest_path])
+      proc = Popen(["hg", "clone", repo_path, dest_path])
+      proc.wait()
 
+
+# Convertir un repositorio de Mercurial a Git
+# Utiliza la aplicación fast-export https://github.com/frej/fast-export
 def convert_hgrepo_to_git(cmd_path, src_path, dest_path):
   command = os.path.join(cmd_path, "hg-fast-export.sh")
-  call(["git", "-C", dest_path, "init"])
+  proc = Popen(["git", "-C", dest_path, "init"])
+  proc.wait()
   proc = Popen([command, "-r", src_path], cwd = dest_path)
   proc.wait()
-  call(["git", "-C", dest_path, "checkout", "master"])
-  
+  proc = Popen(["git", "-C", dest_path, "checkout", "master"])
+  proc.wait()
+
+
 # Copiar los documentos asociados a cada proyecto
 def copy_attachments(project_id, src_path, dest_path):
   copy_documents(project_id, src_path, dest_path)
   copy_wiki_docs(project_id, src_path, dest_path)
   copy_project_docs(project_id, src_path, dest_path)
+
  
 # Copiar archivos de documentos asociados al proyecto
 def copy_documents(project_id, src_path, dest_path):
    # obtener los documentos asociados al proyecto
   result = dbEngine.execute("select id from documents where project_id=%s", project_id)
   docs = result.fetchall()
-  
   for doc in docs:
     result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Document' and container_id=%s", doc["id"])
     files = result.fetchall()
@@ -231,12 +237,13 @@ def copy_documents(project_id, src_path, dest_path):
       dest_full_path = os.path.join(dest_path, file["filename"])
       talk("Copiando archivo %s" % src_full_path, 10)
       shutil.copyfile(src_full_path, dest_full_path)
-  
+
+
+# Copiar adjuntos vinculados al wiki  
 def copy_wiki_docs(project_id, src_path, dest_path):
   # obtener todas las wikis
   result = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
   wikis = result.fetchall()
-  
   for wiki in wikis:
     # obtener las páginas que integran la wiki
     result = dbEngine.execute("select id from wiki_pages where wiki_id = %s" % wiki["id"])
@@ -252,17 +259,19 @@ def copy_wiki_docs(project_id, src_path, dest_path):
         talk("Copiando archivo %s" % src_full_path, 10)
         shutil.copyfile(src_full_path, dest_full_path)
 
+
+# Copiar adjuntos vinculados al proyecto
 def copy_project_docs(project_id, src_path, dest_path):
    # obtener los documentos asociados al proyecto
   result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Project' and container_id=%s", project_id)
   files = result.fetchall()
-  
   # copiar los archivos documento
   for file in files:
     src_full_path = os.path.join(src_path, file["disk_filename"])
     dest_full_path = os.path.join(dest_path, file["filename"])
     talk("Copiando archivo %s" % src_full_path, 10)
     shutil.copyfile(src_full_path, dest_full_path)
+
 
 if __name__ == "__main__":
   main()
