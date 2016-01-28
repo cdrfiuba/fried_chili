@@ -25,7 +25,7 @@ def main():
   doc_dir = "/home/ernesto/temp/backup_labi/files"
   
   # ruta a la herramienta de conversión hg-fast-export
-  hg_export_cmd_dir = "/home/ernesto/temp/fast-export"
+  hg_export_cmd_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fast-export/")
   
   # Cargar credenciales para la base de datos desde un archivo externo
   fName = "mysql-credentials.txt"
