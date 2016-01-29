@@ -1,208 +1,117 @@
+# Fried Chili
+
 ![Logo](images/fried_chili.png)
 
-El objetivo de este proyecto es extraer la mayor cantidad de información posible de los wikis del chiliproject y transformarla en forma automática a wikis de github.
+## ¿De qué se trata este proyecto?
 
-El formato de wiki usado por [Chiliproject](https://www.chiliproject.org/) es [Textile](https://en.wikipedia.org/wiki/Textile_(markup_language)).
+El objetivo de este proyecto es automatizar la conversión de un proyecto en formato [Chiliproject](https://www.chiliproject.org/) a un proyecto capaz de ser importado en [Github](https://github.com/). Esto involucra los siguientes pasos:
 
-El formato de wiki usado por Github es [Markdown](https://guides.github.com/features/mastering-markdown/)
+* Extraer la mayor cantidad de información posible de los wikis del chiliproject y transformarla en forma automática a wikis de Github.
+* Recolectar los archivos adjuntos asociados a un proyecto e incluirlos en un repositorio de Git.
+* Importar y convertir los repositorios de código Mercurial asociados al proyecto a respositorios en formato Git.
 
-## Analizando la base de datos del chili
+Al finalizar este proceso se tendrá un proyecto que puede ser importado a Github con mínimo esfuerzo.
 
-Importar la base de datos:
+## ¿Cómo haremos esto?
 
-`$ mysql -p  < database_chiliproject.sql`
+En primer lugar se necesita realizar un análisis extensivo de la estructura de un proyecto en Chiliproject y luego elegir las herramientas a usar para realizar la conversión:
 
-```
-mysql> use chiliproject;
+* [Análisis de la base de datos del Chiliproject](https://github.com/cdrfiuba/fried_chili/wiki/Base-de-datos-del-Chiliproject)
+* El formato de wiki usado por Chiliproject es [Textile](https://en.wikipedia.org/wiki/Textile_(markup_language)).
+* El formato de wiki usado por Github es [Markdown](https://guides.github.com/features/mastering-markdown/)
 
-mysql> show tables;
-+-------------------------------------+
-| Tables_in_chiliproject              |
-+-------------------------------------+
-| attachments                         |
-| auth_sources                        |
-| boards                              |
-| changes                             |
-| changesets                          |
-| changesets_issues                   |
-| comments                            |
-| custom_fields                       |
-| custom_fields_projects              |
-| custom_fields_trackers              |
-| custom_values                       |
-| documents                           |
-| enabled_modules                     |
-| enumerations                        |
-| groups_users                        |
-| issue_categories                    |
-| issue_relations                     |
-| issue_statuses                      |
-| issues                              |
-| journal_details                     |
-| journals                            |
-| member_roles                        |
-| members                             |
-| messages                            |
-| news                                |
-| open_id_authentication_associations |
-| open_id_authentication_nonces       |
-| projects                            |
-| projects_trackers                   |
-| queries                             |
-| repositories                        |
-| roles                               |
-| schema_migrations                   |
-| settings                            |
-| time_entries                        |
-| tokens                              |
-| trackers                            |
-| user_preferences                    |
-| users                               |
-| versions                            |
-| watchers                            |
-| wiki_content_versions               |
-| wiki_contents                       |
-| wiki_pages                          |
-| wiki_redirects                      |
-| wikis                               |
-| workflows                           |
-+-------------------------------------+
-47 rows in set (0.00 sec)
+### Herramientas
 
-mysql> describe wiki_content_versions;
-+-----------------+--------------+------+-----+---------+----------------+
-| Field           | Type         | Null | Key | Default | Extra          |
-+-----------------+--------------+------+-----+---------+----------------+
-| id              | int(11)      | NO   | PRI | NULL    | auto_increment |
-| wiki_content_id | int(11)      | NO   | MUL | NULL    |                |
-| page_id         | int(11)      | NO   |     | NULL    |                |
-| author_id       | int(11)      | YES  |     | NULL    |                |
-| data            | longblob     | YES  |     | NULL    |                |
-| compression     | varchar(6)   | YES  |     |         |                |
-| comments        | varchar(255) | YES  |     |         |                |
-| updated_on      | datetime     | NO   | MUL | NULL    |                |
-| version         | int(11)      | NO   |     | NULL    |                |
-+-----------------+--------------+------+-----+---------+----------------+
-9 rows in set (0.00 sec)
+* Paquete para conectarse a la base de datos usando Python: [SQL Alchemy](http://www.sqlalchemy.org/)  
 
-mysql> describe wiki_contents;
-+--------------+----------+------+-----+---------+----------------+
-| Field        | Type     | Null | Key | Default | Extra          |
-+--------------+----------+------+-----+---------+----------------+
-| id           | int(11)  | NO   | PRI | NULL    | auto_increment |
-| page_id      | int(11)  | NO   | MUL | NULL    |                |
-| author_id    | int(11)  | YES  | MUL | NULL    |                |
-| text         | longtext | YES  |     | NULL    |                |
-| updated_on   | datetime | NO   |     | NULL    |                |
-| lock_version | int(11)  | NO   |     | NULL    |                |
-+--------------+----------+------+-----+---------+----------------+
-6 rows in set (0.00 sec)
-
-mysql> describe wiki_pages;
-+------------+--------------+------+-----+---------+----------------+
-| Field      | Type         | Null | Key | Default | Extra          |
-+------------+--------------+------+-----+---------+----------------+
-| id         | int(11)      | NO   | PRI | NULL    | auto_increment |
-| wiki_id    | int(11)      | NO   | MUL | NULL    |                |
-| title      | varchar(255) | NO   |     | NULL    |                |
-| created_on | datetime     | NO   |     | NULL    |                |
-| protected  | tinyint(1)   | NO   |     | 0       |                |
-| parent_id  | int(11)      | YES  | MUL | NULL    |                |
-+------------+--------------+------+-----+---------+----------------+
-6 rows in set (0.01 sec)
-
-mysql> describe wiki_redirects;
-+--------------+--------------+------+-----+---------+----------------+
-| Field        | Type         | Null | Key | Default | Extra          |
-+--------------+--------------+------+-----+---------+----------------+
-| id           | int(11)      | NO   | PRI | NULL    | auto_increment |
-| wiki_id      | int(11)      | NO   | MUL | NULL    |                |
-| title        | varchar(255) | YES  |     | NULL    |                |
-| redirects_to | varchar(255) | YES  |     | NULL    |                |
-| created_on   | datetime     | NO   |     | NULL    |                |
-+--------------+--------------+------+-----+---------+----------------+
-5 rows in set (0.00 sec)
-
-mysql> describe wikis;
-+------------+--------------+------+-----+---------+----------------+
-| Field      | Type         | Null | Key | Default | Extra          |
-+------------+--------------+------+-----+---------+----------------+
-| id         | int(11)      | NO   | PRI | NULL    | auto_increment |
-| project_id | int(11)      | NO   | MUL | NULL    |                |
-| start_page | varchar(255) | NO   |     | NULL    |                |
-| status     | int(11)      | NO   |     | 1       |                |
-+------------+--------------+------+-----+---------+----------------+
-4 rows in set (0.00 sec)
-
-mysql> describe attachments;
-+----------------+--------------+------+-----+---------+----------------+
-| Field          | Type         | Null | Key | Default | Extra          |
-+----------------+--------------+------+-----+---------+----------------+
-| id             | int(11)      | NO   | PRI | NULL    | auto_increment |
-| container_id   | int(11)      | NO   | MUL | 0       |                |
-| container_type | varchar(30)  | NO   |     |         |                |
-| filename       | varchar(255) | NO   |     |         |                |
-| disk_filename  | varchar(255) | NO   |     |         |                |
-| filesize       | int(11)      | NO   |     | 0       |                |
-| content_type   | varchar(255) | YES  |     |         |                |
-| digest         | varchar(40)  | NO   |     |         |                |
-| downloads      | int(11)      | NO   |     | 0       |                |
-| author_id      | int(11)      | NO   | MUL | 0       |                |
-| created_on     | datetime     | YES  | MUL | NULL    |                |
-| description    | varchar(255) | YES  |     | NULL    |                |
-+----------------+--------------+------+-----+---------+----------------+
-12 rows in set (0.00 sec)
-
-mysql> describe documents;
-+-------------+-------------+------+-----+---------+----------------+
-| Field       | Type        | Null | Key | Default | Extra          |
-+-------------+-------------+------+-----+---------+----------------+
-| id          | int(11)     | NO   | PRI | NULL    | auto_increment |
-| project_id  | int(11)     | NO   | MUL | 0       |                |
-| category_id | int(11)     | NO   | MUL | 0       |                |
-| title       | varchar(60) | NO   |     |         |                |
-| description | text        | YES  |     | NULL    |                |
-| created_on  | datetime    | YES  | MUL | NULL    |                |
-+-------------+-------------+------+-----+---------+----------------+
-6 rows in set (0.00 sec)
-
-mysql> describe projects;
-+-------------+--------------+------+-----+---------+----------------+
-| Field       | Type         | Null | Key | Default | Extra          |
-+-------------+--------------+------+-----+---------+----------------+
-| id          | int(11)      | NO   | PRI | NULL    | auto_increment |
-| name        | varchar(255) | NO   |     |         |                |
-| description | text         | YES  |     | NULL    |                |
-| homepage    | varchar(255) | YES  |     |         |                |
-| is_public   | tinyint(1)   | NO   |     | 1       |                |
-| parent_id   | int(11)      | YES  |     | NULL    |                |
-| created_on  | datetime     | YES  |     | NULL    |                |
-| updated_on  | datetime     | YES  |     | NULL    |                |
-| identifier  | varchar(255) | YES  |     | NULL    |                |
-| status      | int(11)      | NO   |     | 1       |                |
-| lft         | int(11)      | YES  | MUL | NULL    |                |
-| rgt         | int(11)      | YES  | MUL | NULL    |                |
-+-------------+--------------+------+-----+---------+----------------+
-12 rows in set (0.00 sec)
-```
-![DB relacional](images/db1.png)
-
-## Paquetes para conectarse a la base de datos usando Python
-
-Usamos [SQL Alchemy](http://www.sqlalchemy.org/)
-
-`$ sudo apt-get install python-sqlalchemy`
-
-`$ sudo apt-get install python-mysqldb`
-
-
-## Herramienta para convertir el wiki Textile a Markdown:
-
-http://pandoc.org/
+* Herramienta para convertir el wiki Textile a Markdown:  
+http://pandoc.org/  
 https://github.com/jgm/pandoc
 
-## Herramienta para convertir repositorios de mercurial a git:
+* Herramienta para convertir repositorios de mercurial a git: [Fast-export](https://github.com/frej/fast-export)
 
-https://github.com/frej/fast-export
+## ¿Cómo se usa?
 
+### Requisitos previos
 
+Antes que nada es necesario asegurarse de tener instaladas las dependencias mencionadas arriba en la sección Herramientas:
+
+* Instalar SQL Alquemy y el motor para mysql:  
+`$ sudo apt-get install python-sqlalchemy python-mysqldb`
+
+* Instalar Pandoc:
+`$ sudo apt-get install pandoc`
+
+Tener una copia local de las cosas del Chiliproject:
+
+* Tener montado un servidor Mysql con la base de datos del Chiliproject importada. (ver [sobre la base de datos](https://github.com/cdrfiuba/fried_chili/wiki/Base-de-datos-del-Chiliproject)
+* Una copia de la carpeta `chiliproject/files`
+* Una copia de los repositorios Mercurial
+
+Bajar y descomprimir el Fried Chili: https://github.com/cdrfiuba/fried_chili/archive/master.zip
+
+### Configuración
+
+#### Usuario y contraseña
+
+Para acceder a la base de datos se debe especificar las cedenciales de acceso en un archivo de texto plano llamado `mysql-credentials.txt` con sólo dos líneas. En la primer línea va el nombre de usuario y en la segunda la contraseña:
+```
+nombre_usuario
+contraseña
+```
+
+### Origen de los archivos
+
+Editando el archivo de script `importer.py` se especifica la ruta completa de destino para los proyectos convertidos, para obtener los archivos adjuntos al proyecto y el repositorio de Mercurial:
+```
+  base_dir = "/ruta_destino"
+  
+  src_repo_dir = "/ruta_al_repositorio_hg"
+  
+  doc_dir = "/ruta_a_los_documentos_"
+```
+
+### Ejecución
+
+El script se lanza usando python:  
+`$ python importer.py`
+
+### Resultado
+
+Tras correr el script se creará una estructura de carpetas para alojar a todos los proyectos que se encontraron en la base de datos:
+
+```
+raiz/
+  \
+   ---- proyecto_padre_1/
+            \
+             ---- private/
+                     \
+                      ---- ...
+            \
+             ---- public/
+                     \
+                      ---- proyecto_1/
+                               \
+                                ---- README.md
+                               \
+                                ---- wiki/
+                               \
+                                ---- src_hg/
+                               \
+                                ---- src_git/
+```
+
+* El proyecto padre se divide en proyectos privados y públicos según como estaban especificados en Chiliproject.
+* Cada subproyecto tiene un archivo `REAME.md` generado con la portada del proyecto, la fecha de creación y los integrantes del mismo como referencia. NOTA: este archivo está suelto y no se incluye por defecto en ningún repositorio de Git. Se recomienda copiarlo al repositorio src_git para tener como portada en Github.
+* La carpeta `wiki` contiene las wikis del proyecto convertidas a formato Markdown. Hay un archivo por cada página del wiki. También contiene todos los archivos adjuntos del proyecto. Esta carpeta es un repositorio de Git ya inicializado y listo para ser subido al [repositorio de wiki del proyecto de Github](https://help.github.com/articles/adding-and-editing-wiki-pages-locally/)
+* La carpeta `src_hg` contiene una copia del repositorio de Mecurial original correspondiente a este proyecto y es sólo para referencia.
+* La carpeta `src_git` contiene el repositorio de Mercurial convertido a Git y listo para ser subido a Github.
+
+## ¿Y ahora qué?
+
+Si todo anduvo bien sólo queda [crear un repositorio nuevo en Github](https://help.github.com/articles/creating-a-new-repository/) y subir todo el contenido generado. Las wikis se deben crear y subir aparte ya que son otro repositorio vinculado.
+
+Nota: es probable que se deban editar y corregir los links dentro del wiki, especialmente los referidos a archivos adjuntos.
+
+ 
