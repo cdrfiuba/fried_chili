@@ -79,10 +79,13 @@ def main():
     convert_hgrepo_to_git(hg_export_cmd_dir, src_hg_path, src_git_path)
     
     # copiar los adchivos adjuntos asociados al proyecto
-    copy_attachments(project["id"], doc_dir, wiki_path)
+    file_list = copy_attachments(project["id"], doc_dir, wiki_path)
 
     # generar el repositorio git para el wiki
     repo_init(wiki_path, "Commit inicial del wiki.")
+    
+    # generar wiki con el listado de archivos adjuntos
+    attachment_manifest(wiki_path, file_list)
 
 
 # Escribir información útil en la salida hacia usuario. El nivel de
@@ -217,17 +220,21 @@ def convert_hgrepo_to_git(cmd_path, src_path, dest_path):
 
 
 # Copiar los documentos asociados a cada proyecto
+# Devuelve una lista con el nombre de los archivos copiados
 def copy_attachments(project_id, src_path, dest_path):
-  copy_documents(project_id, src_path, dest_path)
-  copy_wiki_docs(project_id, src_path, dest_path)
-  copy_project_docs(project_id, src_path, dest_path)
+  inventario = copy_documents(project_id, src_path, dest_path)
+  inventario += copy_wiki_docs(project_id, src_path, dest_path)
+  inventario += copy_project_docs(project_id, src_path, dest_path)
+  return inventario
 
  
 # Copiar archivos de documentos asociados al proyecto
+# Devuelve una lista con el nombre de los archivos copiados
 def copy_documents(project_id, src_path, dest_path):
    # obtener los documentos asociados al proyecto
   result = dbEngine.execute("select id from documents where project_id=%s", project_id)
   docs = result.fetchall()
+  inventario = []
   for doc in docs:
     result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Document' and container_id=%s", doc["id"])
     files = result.fetchall()
@@ -237,13 +244,17 @@ def copy_documents(project_id, src_path, dest_path):
       dest_full_path = os.path.join(dest_path, file["filename"])
       talk("Copiando archivo %s" % src_full_path, 10)
       shutil.copyfile(src_full_path, dest_full_path)
+      inventario.append(file["filename"])
+  return inventario
 
 
-# Copiar adjuntos vinculados al wiki  
+# Copiar adjuntos vinculados al wiki
+# Devuelve una lista con el nombre de los archivos copiados
 def copy_wiki_docs(project_id, src_path, dest_path):
   # obtener todas las wikis
   result = dbEngine.execute("select id from wikis where project_id = %s" % project_id)
   wikis = result.fetchall()
+  inventario = []
   for wiki in wikis:
     # obtener las páginas que integran la wiki
     result = dbEngine.execute("select id from wiki_pages where wiki_id = %s" % wiki["id"])
@@ -258,19 +269,34 @@ def copy_wiki_docs(project_id, src_path, dest_path):
         dest_full_path = os.path.join(dest_path, file["filename"])
         talk("Copiando archivo %s" % src_full_path, 10)
         shutil.copyfile(src_full_path, dest_full_path)
+        inventario.append(file["filename"])
+  return inventario
 
 
 # Copiar adjuntos vinculados al proyecto
+# Devuelve una lista con el nombre de los archivos copiados
 def copy_project_docs(project_id, src_path, dest_path):
    # obtener los documentos asociados al proyecto
   result = dbEngine.execute("select filename, disk_filename from attachments where container_type='Project' and container_id=%s", project_id)
   files = result.fetchall()
+  inventario = []
   # copiar los archivos documento
   for file in files:
     src_full_path = os.path.join(src_path, file["disk_filename"])
     dest_full_path = os.path.join(dest_path, file["filename"])
     talk("Copiando archivo %s" % src_full_path, 10)
     shutil.copyfile(src_full_path, dest_full_path)
+    inventario.append(file["filename"])
+  return inventario
+
+# Genera un archivo de wiki con el listado de archivos adjuntos para el proyecto
+def attachment_manifest(path, file_list):
+  file_name = os.path.join(path, "Documentos.md")
+  manifest = open(file_name, "w")
+  manifest.write("# Documentos vinculados a este proyecto:\n\n")
+  for afile in file_list:
+     manifest.write("[%s](%s)\n"%(afile, afile))
+  manifest.close()
 
 
 if __name__ == "__main__":
