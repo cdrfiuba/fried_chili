@@ -291,12 +291,13 @@ def copy_project_docs(project_id, src_path, dest_path):
 
 # Genera un archivo de wiki con el listado de archivos adjuntos para el proyecto
 def attachment_manifest(path, file_list):
-  file_name = os.path.join(path, "Documentos.md")
-  manifest = open(file_name, "w")
-  manifest.write("# Documentos vinculados a este proyecto:\n\n")
-  for afile in file_list:
-     manifest.write("[%s](%s)\n"%(afile, afile))
-  manifest.close()
+  if len(file_list) > 0:
+    file_name = os.path.join(path, "Documentos.md")
+    manifest = open(file_name, "w")
+    manifest.write("# Documentos vinculados a este proyecto:\n\n")
+    for afile in file_list:
+       manifest.write("[%s](%s)\n"%(afile, afile))
+    manifest.close()
 
 
 if __name__ == "__main__":
